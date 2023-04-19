@@ -103,26 +103,20 @@ describe('TikiTakaPlayers', function () {
       await this.tikiTakaPlayers.startAuction(tokenId, startPrice, { from: teamOwner });
       const bidAmount = ether('2');
       await this.tikiTakaPlayers.placeBid(tokenId, bidAmount, { from: bidder1, value: bidAmount });
-      await new Promise(resolve => setTimeout(resolve, 86400 * 1000)); // Wait for 1 day to simulate auction end
+      await time.increase(time.duration.days(1));
+      await time.advanceBlock();
     });
-    it.only('finalizes the auction, transfers NFT ownership, and emits AuctionEnded event', async function () {
+  
+    it('finalizes the auction, transfers NFT ownership, and emits AuctionEnded event', async function () {
       const tokenId = new BN('1');
       const finalBid = ether('2');
       const receipt = await this.tikiTakaPlayers.finalizeAuction(tokenId, { from: bidder1 });
       expectEvent(receipt, 'AuctionEnded', { tokenId: tokenId, winner: bidder1, finalBid: finalBid });
-    
+  
       const newOwner = await this.tikiTakaPlayers.ownerOf(tokenId);
       expect(newOwner).to.equal(bidder1);
     });
-    
-    it('reverts if the auction has not ended', async function () {
-      const tokenId = new BN('1');
-      await expectRevert(
-        this.tikiTakaPlayers.finalizeAuction(tokenId, { from: bidder1 }),
-        'Auction not ended',
-      );
-    });
-    
+        
     it('reverts if the sender is not the highest bidder', async function () {
       const tokenId = new BN('1');
       await expectRevert(
@@ -130,6 +124,24 @@ describe('TikiTakaPlayers', function () {
         'Not the highest bidder',
         );
     });
+  });
+
+    describe('finalizeAuction with ongoing auction', function () {
+      beforeEach(async function () {
+        await this.tikiTakaPlayers.mintPlayer(teamOwner, name, nationality, avatarCID, { from: deployer });
+        const tokenId = new BN('1');
+        await this.tikiTakaPlayers.startAuction(tokenId, startPrice, { from: teamOwner });
+        const bidAmount = ether('2');
+        await this.tikiTakaPlayers.placeBid(tokenId, bidAmount, { from: bidder1, value: bidAmount });
+      });
+
+      it('reverts if the auction has not ended', async function () {
+        const tokenId = new BN('1');
+        await expectRevert(
+          this.tikiTakaPlayers.finalizeAuction(tokenId, { from: bidder1 }),
+          'Auction not ended',
+        );
+      });
   });
 
   describe('Edge cases', function () {
@@ -144,14 +156,11 @@ describe('TikiTakaPlayers', function () {
       const firstBidAmount = ether('2');
       const secondBidAmount = ether('3');
     
-      // Bidder1 places the first bid
       await this.tikiTakaPlayers.placeBid(tokenId, firstBidAmount, { from: bidder1, value: firstBidAmount });
       const bidder1InitialBalance = await web3.eth.getBalance(bidder1);
     
-      // Bidder2 places a higher bid
       await this.tikiTakaPlayers.placeBid(tokenId, secondBidAmount, { from: bidder2, value: secondBidAmount });
     
-      // Bidder1 should be refunded
       const bidder1FinalBalance = await web3.eth.getBalance(bidder1);
       expect(new BN(bidder1FinalBalance)).to.be.bignumber.gte(new BN(bidder1InitialBalance));
     });
